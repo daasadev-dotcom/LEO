@@ -210,20 +210,21 @@ function setupMusicEvents(client) {
                             break;
                         }
                         case 'music_back': {
-                            if (!player.currentTrack) {
+                            const previousTrack = player.queue?.previous;
+                            if (!previousTrack) {
                                 const container = new ContainerBuilder()
-                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} No track is currently playing!`));
+                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} No previous track in history!`));
                                 return interaction.reply({ 
                                     components: [container], 
                                     flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
                                     ephemeral: true 
                                 });
                             }
-                            const backSeconds = 10;
-                            const backPosition = Math.max(player.position - backSeconds * 1000, 0);
-                            player.seekTo(backPosition);
+                            if (player.currentTrack) player.queue.unshift(player.currentTrack);
+                            player.queue.unshift(previousTrack);
+                            player.skip();
                             const backContainer = new ContainerBuilder()
-                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.back} Skipped backward **${backSeconds}s**.`));
+                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.back} Playing previous track: **${previousTrack.info.title}**`));
                             await interaction.reply({ 
                                 components: [backContainer], 
                                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
