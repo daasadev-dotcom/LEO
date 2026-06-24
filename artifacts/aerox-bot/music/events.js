@@ -210,21 +210,20 @@ function setupMusicEvents(client) {
                             break;
                         }
                         case 'music_back': {
-                            const history = player.queue?.previous;
-                            if (!history) {
+                            if (!player.currentTrack) {
                                 const container = new ContainerBuilder()
-                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} No previous track in history!`));
+                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} No track is currently playing!`));
                                 return interaction.reply({ 
                                     components: [container], 
                                     flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
                                     ephemeral: true 
                                 });
                             }
-                            player.queue.unshift(player.currentTrack);
-                            player.queue.unshift(history);
-                            player.skip();
+                            const backSeconds = 10;
+                            const backPosition = Math.max(player.position - backSeconds * 1000, 0);
+                            player.seekTo(backPosition);
                             const backContainer = new ContainerBuilder()
-                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.back} Playing previous track.`));
+                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.back} Skipped backward **${backSeconds}s**.`));
                             await interaction.reply({ 
                                 components: [backContainer], 
                                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
@@ -247,18 +246,16 @@ function setupMusicEvents(client) {
                         case 'music_forward': {
                             if (!player.currentTrack) {
                                 const container = new ContainerBuilder()
-                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} No track is currently playing!`));
+                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} Nothing to skip!`));
                                 return interaction.reply({ 
                                     components: [container], 
                                     flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
                                     ephemeral: true 
                                 });
                             }
-                            const forwardSeconds = 10;
-                            const newPosition = Math.min(player.position + forwardSeconds * 1000, player.currentTrack.info.length);
-                            player.seekTo(newPosition);
+                            player.skip();
                             const fwdContainer = new ContainerBuilder()
-                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.seek} Skipped forward **${forwardSeconds}s**.`));
+                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.skip} Skipped to the next track.`));
                             await interaction.reply({ 
                                 components: [fwdContainer], 
                                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
