@@ -3,7 +3,7 @@ const { hexToDecimal } = require('../helpers/colorHelper');
 const { MusicCard } = require('../helpers/MusicCard');
 const Favorite = require('../database/models/Favorite');
 const config = require('../config');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 
 const musicCard = new MusicCard();

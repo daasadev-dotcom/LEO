@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { setupMusicEvents } = require('./music/events');
 const config = require('./config');
-
+const MessageContext = require('./utils/MessageContext');
 
 const colors = {
     CYAN: '\x1b[96m',
@@ -20,7 +20,6 @@ const colors = {
     DIM: '\x1b[2m',
     RESET: '\x1b[0m'
 };
-
 
 function printHeader() {
     console.log(`\n${colors.CYAN}╭─────────────────────────────────────────────────────────────╮${colors.RESET}`);
@@ -59,26 +58,15 @@ function printSystemReady() {
     console.log();
 }
 
-
 printHeader();
 
-
 global.aerox = {
-    bot: {
-        color: '#5865F2'
-    },
+    bot: { color: '#5865F2' },
     addons: {
-        music: {
-            playlistLimit: config.MUSIC.PLAYLIST_LIMIT || 3,
-            useAI: false
-        },
-        ai: {
-            geminiApiKeys: null
-        }
+        music: { playlistLimit: config.MUSIC.PLAYLIST_LIMIT || 3, useAI: false },
+        ai: { geminiApiKeys: null }
     },
-    db: {
-        timezone: '+00:00'
-    }
+    db: { timezone: '+00:00' }
 };
 
 const client = new Client({
@@ -92,8 +80,6 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-client.prefixCommands = new Collection();
-
 
 printLoading('Command modules');
 const commandsPath = path.join(__dirname, 'commands');
@@ -118,43 +104,12 @@ if (skippedCommands > 0) {
     printInfo(`Skipped ${skippedCommands} invalid command files`);
 }
 
-
-printLoading('Prefix command modules');
-const pCommandsPath = path.join(__dirname, 'pCommands');
-const pCommandFiles = fs.readdirSync(pCommandsPath).filter(file => file.endsWith('.js'));
-
-let loadedPrefixCommands = 0;
-let skippedPrefixCommands = 0;
-
-for (const file of pCommandFiles) {
-    const filePath = path.join(pCommandsPath, file);
-    const command = require(filePath);
-    if ('name' in command && 'execute' in command) {
-        client.prefixCommands.set(command.name, command);
-        if (command.aliases && Array.isArray(command.aliases)) {
-            command.aliases.forEach(alias => {
-                client.prefixCommands.set(alias, command);
-            });
-        }
-        loadedPrefixCommands++;
-    } else {
-        skippedPrefixCommands++;
-    }
-}
-
-printSuccess(`Prefix command modules loaded (${loadedPrefixCommands} commands)`);
-if (skippedPrefixCommands > 0) {
-    printInfo(`Skipped ${skippedPrefixCommands} invalid prefix command files`);
-}
-
-
 printLoading('Event handlers');
 const eventsPath = path.join(__dirname, 'events');
 let loadedEvents = 0;
 
 if (fs.existsSync(eventsPath)) {
     const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
-    
     for (const file of eventFiles) {
         const filePath = path.join(eventsPath, file);
         const event = require(filePath);
@@ -168,11 +123,9 @@ if (fs.existsSync(eventsPath)) {
     printInfo('No events directory found, skipping event loading');
 }
 
-
 printLoading('Database connection');
 require('./database/models');
 printSuccess('Database initialized');
-
 
 const nodes = [];
 const hosts = config.LAVALINK.HOSTS.split(',');
@@ -192,7 +145,6 @@ for (let i = 0; i < hosts.length; i++) {
 
 printLoading('Music system (LavaLink)');
 
-
 let lavaLinkConnected;
 const lavaLinkPromise = new Promise((resolve) => {
     lavaLinkConnected = resolve;
@@ -210,7 +162,7 @@ client.poru = new Poru(client, nodes, {
 client.poru.on('nodeConnect', (node) => {
     if (lavaLinkConnected) {
         lavaLinkConnected(node);
-        lavaLinkConnected = null; 
+        lavaLinkConnected = null;
     }
 });
 
@@ -226,18 +178,9 @@ client.poru.on('nodeError', (node, error) => {
     printError(`LavaLink node error (${node.name}): ${error.message}`);
 });
 
-
-client.poru.on('playerCreate', (player) => {
-    
-});
-
-client.poru.on('playerDestroy', (player) => {
-    
-});
-
 client.once('clientReady', async () => {
     printSuccess(`Authentication successful → ${colors.PURPLE}${client.user.tag}${colors.RESET}`);
-    
+
     printLoading('Music player system');
     client.poru.init(client.user.id);
     setupMusicEvents(client);
@@ -245,10 +188,9 @@ client.once('clientReady', async () => {
 
     printLoading('LavaLink connection');
     try {
-        
         const node = await Promise.race([
             lavaLinkPromise,
-            new Promise((_, reject) => 
+            new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Connection timeout')), 10000)
             )
         ]);
@@ -276,14 +218,11 @@ client.on('interactionCreate', async (interaction) => {
             console.error(`Command not found: ${interaction.commandName}`);
             return;
         }
-
         try {
             await command.execute(interaction);
         } catch (error) {
             console.error(`Error executing ${interaction.commandName}:`, error);
-
             const errorMessage = { content: 'There was an error executing this command!', ephemeral: true };
-
             try {
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.reply(errorMessage);
@@ -297,7 +236,6 @@ client.on('interactionCreate', async (interaction) => {
     } else if (interaction.isAutocomplete()) {
         const command = client.commands.get(interaction.commandName);
         if (!command || !command.autocomplete) return;
-
         try {
             await command.autocomplete(interaction);
         } catch (error) {
@@ -307,45 +245,29 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-    
-    const NoPrefix = require('./database/models/NoPrefix');
-    const hasNoPrefix = await NoPrefix.isNoPrefixUser(message.author.id);
-    
-    let messageContent;
-    
-    if (hasNoPrefix && !message.content.startsWith(config.PREFIX)) {
-        messageContent = message.content.trim();
-    } else if (message.content.startsWith(config.PREFIX)) {
-        messageContent = message.content.slice(config.PREFIX.length).trim();
-    } else {
-        return;
-    }
+    if (message.author.bot || !message.guild) return;
 
-    let command = null;
-    let commandName = null;
-    let args = [];
+    const { GuildPrefix } = require('./database/models');
+    const prefix = await GuildPrefix.getPrefix(message.guildId);
 
-    const allWords = messageContent.split(/ +/);
-    
-    for (let wordCount = Math.min(allWords.length, 3); wordCount > 0; wordCount--) {
-        const potentialCommand = allWords.slice(0, wordCount).join(' ').toLowerCase();
-        if (client.prefixCommands.has(potentialCommand)) {
-            command = client.prefixCommands.get(potentialCommand);
-            commandName = potentialCommand;
-            args = allWords.slice(wordCount);
-            break;
-        }
-    }
+    if (!message.content.startsWith(prefix)) return;
 
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const commandName = args.shift().toLowerCase();
+
+    if (!commandName) return;
+
+    const command = client.commands.get(commandName);
     if (!command) return;
 
+    const ctx = new MessageContext(message, args, command);
+
     try {
-        await command.execute(message, args);
+        await command.execute(ctx);
     } catch (error) {
         console.error(`Error executing prefix command ${commandName}:`, error);
         try {
-            await message.reply('There was an error executing this command!');
+            await message.reply('❌ There was an error executing that command!');
         } catch (replyError) {
             console.error('Error sending error response:', replyError);
         }
@@ -354,13 +276,10 @@ client.on('messageCreate', async (message) => {
 
 async function registerCommands() {
     const commands = [];
-
     for (const command of client.commands.values()) {
         commands.push(command.data.toJSON());
     }
-
     const rest = new REST({ version: '10' }).setToken(config.BOT_TOKEN);
-
     await rest.put(
         Routes.applicationCommands(config.CLIENT_ID),
         { body: commands }
@@ -391,10 +310,3 @@ client.login(config.BOT_TOKEN).catch((error) => {
     printError(`Failed to login: ${error.message}`);
     process.exit(1);
 });
-/*
-: ! Aegis !
-    + Discord: itsfizys
-    + Portfolio: https://itsfiizys.com
-    + Community: https://discord.gg/8wfT8SfB5Z  (AeroX Development )
-    + for any queries reach out Community or DM me.
-*/

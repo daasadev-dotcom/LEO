@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } = require('discord.js');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 module.exports = {
     data: new SlashCommandBuilder()

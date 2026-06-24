@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } = require('discord.js');
 const { hexToDecimal } = require('../helpers/colorHelper');
 const { formatDuration, createProgressBar } = require('../helpers/musicHelpers');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 module.exports = {
     data: new SlashCommandBuilder()

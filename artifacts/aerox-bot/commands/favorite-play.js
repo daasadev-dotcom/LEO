@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags 
 const { hexToDecimal } = require('../helpers/colorHelper');
 const Favorite = require('../database/models/Favorite');
 const config = require('../config');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 module.exports = {
     data: new SlashCommandBuilder()

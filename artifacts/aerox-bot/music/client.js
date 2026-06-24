@@ -1,6 +1,6 @@
 const axios = require('axios');
 const config = require('../config');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 class PterodactylClient {
     constructor() {

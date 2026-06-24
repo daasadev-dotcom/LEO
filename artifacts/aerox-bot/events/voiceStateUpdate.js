@@ -1,5 +1,5 @@
 const { Events, ContainerBuilder, TextDisplayBuilder, MessageFlags } = require('discord.js');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 const aloneTimeouts = new Map();
 

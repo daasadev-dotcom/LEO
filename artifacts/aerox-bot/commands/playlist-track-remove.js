@@ -3,7 +3,7 @@ const { hexToDecimal } = require('../helpers/colorHelper');
 const Playlist = require('../database/models/Playlist');
 const PlaylistTrack = require('../database/models/PlaylistTrack');
 const config = require('../config');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 module.exports = {
     data: new SlashCommandBuilder()

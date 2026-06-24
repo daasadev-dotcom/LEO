@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuil
 const { hexToDecimal } = require('../helpers/colorHelper');
 const { formatDuration } = require('../helpers/musicHelpers');
 const config = require('../config');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 const Genius = require('genius-lyrics');
 
 module.exports = {

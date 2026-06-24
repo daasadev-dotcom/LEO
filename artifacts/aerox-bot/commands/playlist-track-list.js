@@ -3,7 +3,7 @@ const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SectionBuilde
 const { formatDuration } = require('../helpers/musicHelpers');
 const Playlist = require('../database/models/Playlist');
 const PlaylistTrack = require('../database/models/PlaylistTrack');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 module.exports = {
     data: new SlashCommandBuilder()

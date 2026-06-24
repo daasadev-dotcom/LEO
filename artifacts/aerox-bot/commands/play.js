@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuil
 const { formatDuration } = require('../helpers/musicHelpers');
 const { hexToDecimal } = require('../helpers/colorHelper');
 const config = require('../config');
-const emojis = require('../emojis.json');
+const emojis = require('../utils/emojis');
 
 module.exports = {
     data: new SlashCommandBuilder()
