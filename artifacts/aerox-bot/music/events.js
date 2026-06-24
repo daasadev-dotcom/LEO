@@ -48,8 +48,8 @@ function setupMusicEvents(client) {
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
-                    .setCustomId('music_skip')
-                    .setEmoji(emojis.skip)
+                    .setCustomId('music_back')
+                    .setEmoji(emojis.back)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
@@ -58,8 +58,8 @@ function setupMusicEvents(client) {
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
-                    .setCustomId('music_loop')
-                    .setEmoji(emojis.loop)
+                    .setCustomId('music_forward')
+                    .setEmoji(emojis.seek)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
@@ -209,21 +209,24 @@ function setupMusicEvents(client) {
                             });
                             break;
                         }
-                        case 'music_skip': {
-                            if (!player.currentTrack) {
+                        case 'music_back': {
+                            const history = player.queue?.previous;
+                            if (!history) {
                                 const container = new ContainerBuilder()
-                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} Nothing to skip!`));
+                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} No previous track in history!`));
                                 return interaction.reply({ 
                                     components: [container], 
                                     flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
                                     ephemeral: true 
                                 });
                             }
+                            player.queue.unshift(player.currentTrack);
+                            player.queue.unshift(history);
                             player.skip();
-                            const container = new ContainerBuilder()
-                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.skip} Skipped the current track.`));
+                            const backContainer = new ContainerBuilder()
+                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.back} Playing previous track.`));
                             await interaction.reply({ 
-                                components: [container], 
+                                components: [backContainer], 
                                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
                                 ephemeral: true 
                             });
@@ -241,21 +244,23 @@ function setupMusicEvents(client) {
                             });
                             break;
                         }
-                        case 'music_loop': {
-                            if (player.loop === 'NONE' || !player.loop) {
-                                player.setLoop('TRACK');
-                                var msg = `${emojis.loopTrack} Loop track enabled.`;
-                            } else if (player.loop === 'TRACK') {
-                                player.setLoop('QUEUE');
-                                var msg = `${emojis.loop} Queue repeat enabled.`;
-                            } else {
-                                player.setLoop('NONE');
-                                var msg = `${emojis.error} Loop disabled.`;
+                        case 'music_forward': {
+                            if (!player.currentTrack) {
+                                const container = new ContainerBuilder()
+                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.error} No track is currently playing!`));
+                                return interaction.reply({ 
+                                    components: [container], 
+                                    flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
+                                    ephemeral: true 
+                                });
                             }
-                            const container = new ContainerBuilder()
-                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(msg));
+                            const forwardSeconds = 10;
+                            const newPosition = Math.min(player.position + forwardSeconds * 1000, player.currentTrack.info.length);
+                            player.seekTo(newPosition);
+                            const fwdContainer = new ContainerBuilder()
+                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.seek} Skipped forward **${forwardSeconds}s**.`));
                             await interaction.reply({ 
-                                components: [container], 
+                                components: [fwdContainer], 
                                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
                                 ephemeral: true 
                             });
