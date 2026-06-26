@@ -549,9 +549,8 @@ function setupMusicEvents(client) {
                             if (!(player.filters instanceof customFilter)) {
                                 player.filters = new customFilter(player);
                             }
-                            player.filters.clearFilters(false);
-                            let filterLabel = selected;
                             if (selected === 'reset') {
+                                player.filters.clearFilters(true);
                                 await player.filters.updateFilters();
                                 const container = new ContainerBuilder()
                                     .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.success} All filters have been reset!`));
@@ -569,6 +568,7 @@ function setupMusicEvents(client) {
                                 case 'distortion':  player.filters.setDistortion(true); break;
                                 case 'pop':         player.filters.setEqualizer([{ band: 0, gain: 0.65 }, { band: 1, gain: 0.45 }, { band: 2, gain: -0.45 }, { band: 3, gain: -0.65 }, { band: 4, gain: -0.35 }, { band: 5, gain: 0.45 }, { band: 6, gain: 0.55 }, { band: 7, gain: 0.6 }, { band: 8, gain: 0.6 }, { band: 9, gain: 0.6 }, { band: 10, gain: 0 }, { band: 11, gain: 0 }, { band: 12, gain: 0 }, { band: 13, gain: 0 }]); break;
                                 case 'soft':        player.filters.setEqualizer([{ band: 0, gain: 0 }, { band: 1, gain: 0 }, { band: 2, gain: 0 }, { band: 3, gain: 0 }, { band: 4, gain: 0 }, { band: 5, gain: 0 }, { band: 6, gain: 0 }, { band: 7, gain: 0 }, { band: 8, gain: -0.25 }, { band: 9, gain: -0.25 }, { band: 10, gain: -0.25 }, { band: 11, gain: -0.25 }, { band: 12, gain: -0.25 }, { band: 13, gain: -0.25 }]); break;
+                                default: return interaction.reply({ content: 'Unknown filter.', ephemeral: true });
                             }
                             await player.filters.updateFilters();
                             const container = new ContainerBuilder()
