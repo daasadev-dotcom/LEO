@@ -78,6 +78,11 @@ function setupMusicEvents(client) {
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
+                    .setCustomId('music_vol_down')
+                    .setEmoji(emojis.volumeDown)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
                     .setCustomId('music_queue')
                     .setEmoji(emojis.queue)
                     .setStyle(ButtonStyle.Secondary)
@@ -85,11 +90,6 @@ function setupMusicEvents(client) {
                 new ButtonBuilder()
                     .setCustomId('music_shuffle')
                     .setEmoji(emojis.shuffle)
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(disabled),
-                new ButtonBuilder()
-                    .setCustomId('music_vol_down')
-                    .setEmoji(emojis.volumeDown)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
