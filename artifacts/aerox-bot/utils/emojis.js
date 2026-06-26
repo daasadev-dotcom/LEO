@@ -10,6 +10,7 @@ module.exports = {
     loop: '🔁',
     loopTrack: '🔂',
     volume: '🔊',
+    volumeDown: '🔉',
     shuffle: '🔀',
     back: '⏮️',
     filter: '🎚️',

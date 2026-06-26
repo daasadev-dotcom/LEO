@@ -1,4 +1,4 @@
-const { ContainerBuilder, TextDisplayBuilder, SectionBuilder, ThumbnailBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ComponentType, AttachmentBuilder } = require('discord.js');
+const { ContainerBuilder, TextDisplayBuilder, SectionBuilder, ThumbnailBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags, ComponentType, AttachmentBuilder } = require('discord.js');
 const { hexToDecimal } = require('../helpers/colorHelper');
 const { MusicCard } = require('../helpers/MusicCard');
 const Favorite = require('../database/models/Favorite');
@@ -73,8 +73,8 @@ function setupMusicEvents(client) {
         function getSecondControlButtonRow(disabled = false) {
             return new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId('music_lyrics')
-                    .setEmoji(emojis.lyrics)
+                    .setCustomId('music_vol_up')
+                    .setEmoji(emojis.volume)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
@@ -88,8 +88,8 @@ function setupMusicEvents(client) {
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
-                    .setCustomId('music_filter')
-                    .setEmoji(emojis.filter)
+                    .setCustomId('music_vol_down')
+                    .setEmoji(emojis.volumeDown)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled),
                 new ButtonBuilder()
@@ -97,6 +97,29 @@ function setupMusicEvents(client) {
                     .setEmoji(emojis.favorite)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled)
+            );
+        }
+
+        function getFilterSelectRow(disabled = false) {
+            return new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('music_filter_select')
+                    .setPlaceholder('🎚️ Select an audio filter...')
+                    .setDisabled(disabled)
+                    .addOptions(
+                        new StringSelectMenuOptionBuilder().setLabel('Reset (No Filter)').setValue('reset').setEmoji('🔄'),
+                        new StringSelectMenuOptionBuilder().setLabel('Nightcore').setValue('nightcore').setEmoji('🌙'),
+                        new StringSelectMenuOptionBuilder().setLabel('Vaporwave').setValue('vaporwave').setEmoji('🌊'),
+                        new StringSelectMenuOptionBuilder().setLabel('Bassboost').setValue('bassboost').setEmoji('🔊'),
+                        new StringSelectMenuOptionBuilder().setLabel('8D').setValue('eightD').setEmoji('🔄'),
+                        new StringSelectMenuOptionBuilder().setLabel('Karaoke').setValue('karaoke').setEmoji('🎤'),
+                        new StringSelectMenuOptionBuilder().setLabel('Vibrato').setValue('vibrato').setEmoji('〰️'),
+                        new StringSelectMenuOptionBuilder().setLabel('Tremolo').setValue('tremolo').setEmoji('〰️'),
+                        new StringSelectMenuOptionBuilder().setLabel('Slowed').setValue('slowed').setEmoji('🐢'),
+                        new StringSelectMenuOptionBuilder().setLabel('Distortion').setValue('distortion').setEmoji('⚡'),
+                        new StringSelectMenuOptionBuilder().setLabel('Pop').setValue('pop').setEmoji('🎧'),
+                        new StringSelectMenuOptionBuilder().setLabel('Soft').setValue('soft').setEmoji('💤')
+                    )
             );
         }
 
@@ -157,10 +180,13 @@ function setupMusicEvents(client) {
 
         container.addTextDisplayComponents(new TextDisplayBuilder().setContent(nowPlayingText));
 
+        let filterSelectRow = getFilterSelectRow(false);
+
         container
             .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
             .addActionRowComponents(firstControlButtonRow)
             .addActionRowComponents(secondControlButtonRow)
+            .addActionRowComponents(filterSelectRow)
             .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
 
         try {
@@ -177,11 +203,8 @@ function setupMusicEvents(client) {
             const message = await channel.send(messageOptions);
             player.nowPlayingMessage = message;
 
-            const filter = (i) => i.isButton() && i.message.id === message.id && i.guildId === player.guildId && i.customId.startsWith('music_');
-            const collector = message.createMessageComponentCollector({
-                componentType: ComponentType.Button,
-                filter,
-            });
+            const filter = (i) => (i.isButton() || i.isStringSelectMenu()) && i.message.id === message.id && i.guildId === player.guildId && i.customId.startsWith('music_');
+            const collector = message.createMessageComponentCollector({ filter });
             player.buttonCollector = collector;
 
             collector.on('collect', async (interaction) => {
@@ -276,7 +299,16 @@ function setupMusicEvents(client) {
                             
                             break;
                         }
-                        case 'music_lyrics': {
+                        case 'music_vol_up': {
+                            const currentVol = player.volume ?? 100;
+                            const newVol = Math.min(currentVol + 10, 200);
+                            player.setVolume(newVol);
+                            const container = new ContainerBuilder()
+                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.volume} Volume set to **${newVol}%**`));
+                            await interaction.reply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
+                            break;
+                        }
+                        case 'music_lyrics_unused': {
                             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                             
                             try {
@@ -502,12 +534,46 @@ function setupMusicEvents(client) {
                             });
                             break;
                         }
-                        case 'music_filter': {
-                            const filterCommand = client.commands.get('filter');
-                            if (filterCommand) {
-                                await filterCommand.execute(interaction);
-                            }
+                        case 'music_vol_down': {
+                            const currentVol = player.volume ?? 100;
+                            const newVol = Math.max(currentVol - 10, 0);
+                            player.setVolume(newVol);
+                            const container = new ContainerBuilder()
+                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.volumeDown} Volume set to **${newVol}%**`));
+                            await interaction.reply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
                             break;
+                        }
+                        case 'music_filter_select': {
+                            const { customFilter } = require('poru');
+                            const selected = interaction.values[0];
+                            if (!(player.filters instanceof customFilter)) {
+                                player.filters = new customFilter(player);
+                            }
+                            player.filters.clearFilters(false);
+                            let filterLabel = selected;
+                            if (selected === 'reset') {
+                                await player.filters.updateFilters();
+                                const container = new ContainerBuilder()
+                                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.success} All filters have been reset!`));
+                                return interaction.reply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
+                            }
+                            switch (selected) {
+                                case 'nightcore':   player.filters.setNightcore(true); break;
+                                case 'vaporwave':   player.filters.setVaporwave(true); break;
+                                case 'bassboost':   player.filters.setBassboost(true); break;
+                                case 'eightD':      player.filters.set8D(true); break;
+                                case 'karaoke':     player.filters.setKaraoke(true); break;
+                                case 'vibrato':     player.filters.setVibrato(true); break;
+                                case 'tremolo':     player.filters.setTremolo(true); break;
+                                case 'slowed':      player.filters.setSlowmode(true); break;
+                                case 'distortion':  player.filters.setDistortion(true); break;
+                                case 'pop':         player.filters.setEqualizer([{ band: 0, gain: 0.65 }, { band: 1, gain: 0.45 }, { band: 2, gain: -0.45 }, { band: 3, gain: -0.65 }, { band: 4, gain: -0.35 }, { band: 5, gain: 0.45 }, { band: 6, gain: 0.55 }, { band: 7, gain: 0.6 }, { band: 8, gain: 0.6 }, { band: 9, gain: 0.6 }, { band: 10, gain: 0 }, { band: 11, gain: 0 }, { band: 12, gain: 0 }, { band: 13, gain: 0 }]); break;
+                                case 'soft':        player.filters.setEqualizer([{ band: 0, gain: 0 }, { band: 1, gain: 0 }, { band: 2, gain: 0 }, { band: 3, gain: 0 }, { band: 4, gain: 0 }, { band: 5, gain: 0 }, { band: 6, gain: 0 }, { band: 7, gain: 0 }, { band: 8, gain: -0.25 }, { band: 9, gain: -0.25 }, { band: 10, gain: -0.25 }, { band: 11, gain: -0.25 }, { band: 12, gain: -0.25 }, { band: 13, gain: -0.25 }]); break;
+                            }
+                            await player.filters.updateFilters();
+                            const container = new ContainerBuilder()
+                                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${emojis.success} Applied **${selected}** filter!`));
+                            return interaction.reply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
                         }
                         case 'music_favorite_add': {
                             const favoriteAddCommand = client.commands.get('favoriteadd');
@@ -589,6 +655,7 @@ function setupMusicEvents(client) {
                         .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
                         .addActionRowComponents(updatedFirstControlButtonRow)
                         .addActionRowComponents(updatedSecondControlButtonRow)
+                        .addActionRowComponents(getFilterSelectRow(false))
                         .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
 
                     try {
