@@ -42,6 +42,16 @@ async function getSpotifyUser(spotifyUserId) {
     if (!response.ok) {
         const status = response.status;
         if (status === 404) throw new Error(`SPOTIFY_USER_NOT_FOUND:${spotifyUserId}`);
+        if (status === 403) {
+            return {
+                id: spotifyUserId,
+                display_name: spotifyUserId,
+                images: [],
+                followers: { total: 0 },
+                external_urls: { spotify: `https://open.spotify.com/user/${encodeURIComponent(spotifyUserId)}` },
+                _restricted: true,
+            };
+        }
         throw new Error(`SPOTIFY_API_ERROR:${status}`);
     }
     return response.json();
