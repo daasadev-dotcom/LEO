@@ -6,6 +6,7 @@ const NoPrefix = require('./NoPrefix');
 const GuildPrefix = require('./GuildPrefix');
 const GuildTwentyFourSeven = require('./GuildTwentyFourSeven');
 const SpotifyProfile = require('./SpotifyProfile');
+const SpotifyUserPlaylist = require('./SpotifyUserPlaylist');
 
 const models = {
     Favorite,
@@ -15,6 +16,7 @@ const models = {
     GuildPrefix,
     GuildTwentyFourSeven,
     SpotifyProfile,
+    SpotifyUserPlaylist,
     sequelize
 };
 
