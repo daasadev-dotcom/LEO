@@ -24,7 +24,8 @@ async function getSpotifyToken() {
     });
 
     if (!response.ok) {
-        throw new Error(`Spotify auth failed: ${response.status}`);
+        const body = await response.text().catch(() => '');
+        throw new Error(`SPOTIFY_TOKEN_ERROR:${response.status}:${body}`);
     }
 
     const data = await response.json();
@@ -38,7 +39,11 @@ async function getSpotifyUser(spotifyUserId) {
     const response = await fetch(`https://api.spotify.com/v1/users/${encodeURIComponent(spotifyUserId)}`, {
         headers: { Authorization: `Bearer ${token}` },
     });
-    if (!response.ok) throw new Error(`Failed to fetch Spotify user: ${response.status}`);
+    if (!response.ok) {
+        const status = response.status;
+        if (status === 404) throw new Error(`SPOTIFY_USER_NOT_FOUND:${spotifyUserId}`);
+        throw new Error(`SPOTIFY_API_ERROR:${status}`);
+    }
     return response.json();
 }
 

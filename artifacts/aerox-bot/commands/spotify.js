@@ -311,6 +311,14 @@ module.exports = {
 
     async execute(interaction) {
         const { user, client } = interaction;
+
+        if (typeof interaction.options?.getSubcommand !== 'function') {
+            const c = new ContainerBuilder().addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`🎵 Use the slash command \`/spotify login\`, \`/spotify profile\`, \`/spotify playlists\`, or \`/spotify logout\`.`)
+            );
+            return interaction.reply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
+        }
+
         const sub = interaction.options.getSubcommand();
 
         if (!hasSpotifyCredentials()) {
@@ -391,12 +399,19 @@ module.exports = {
                 let userData;
                 try {
                     userData = await getSpotifyUser(spotifyUserId);
-                } catch {
-                    const c = new ContainerBuilder().addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(
-                            `${emojis.error} Could not find that Spotify profile.\nMake sure the URL or username is correct.`
-                        )
-                    );
+                } catch (err) {
+                    console.error('[Spotify] getSpotifyUser failed:', err.message);
+                    let msg;
+                    if (err.message.startsWith('SPOTIFY_TOKEN_ERROR')) {
+                        msg = `${emojis.error} **Spotify credentials are invalid.**\nThe \`SPOTIFY_CLIENT_ID\` or \`SPOTIFY_CLIENT_SECRET\` set by the bot owner is incorrect.\n-# Details: \`${err.message}\``;
+                    } else if (err.message.startsWith('SPOTIFY_USER_NOT_FOUND')) {
+                        msg = `${emojis.error} **No Spotify account found** for \`${spotifyUserId}\`.\nMake sure you paste your full profile URL: \`https://open.spotify.com/user/your_id\``;
+                    } else if (err.message.includes('not set')) {
+                        msg = `${emojis.error} **Spotify is not configured.**\nAsk the bot owner to set \`SPOTIFY_CLIENT_ID\` and \`SPOTIFY_CLIENT_SECRET\`.`;
+                    } else {
+                        msg = `${emojis.error} **Spotify API error.**\n-# Details: \`${err.message}\``;
+                    }
+                    const c = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(msg));
                     return modalSubmit.editReply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
                 }
 
