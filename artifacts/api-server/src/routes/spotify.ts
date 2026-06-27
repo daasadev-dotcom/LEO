@@ -154,6 +154,7 @@ router.get("/spotify/callback", async (req: Request, res: Response) => {
       return res.send(errorHtml("Failed to save your Spotify account. Please try again."));
     }
 
+    res.set("Cache-Control", "no-store");
     return res.send(successHtml(displayName));
   } catch (err) {
     console.error("[Spotify OAuth] Callback error:", err);

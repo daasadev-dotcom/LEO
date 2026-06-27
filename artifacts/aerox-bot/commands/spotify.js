@@ -364,8 +364,8 @@ module.exports = {
             const connectContainer = new ContainerBuilder()
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
-                        `## 🎵 Connect Spotify\nClick the button below to link your Spotify profile\n\n` +
-                        `-# Make sure \`${redirectUri}\` is added to your Spotify app's Redirect URIs`
+                        `## 🎵 Connect Spotify\nClick **Login with Spotify** and authorize in your browser.\nThis message will update automatically once you're connected.\n\n` +
+                        `-# Redirect URI: \`${redirectUri}\``
                     )
                 )
                 .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
@@ -375,52 +375,59 @@ module.exports = {
                             .setLabel('Login with Spotify')
                             .setEmoji('🎵')
                             .setStyle(ButtonStyle.Link)
-                            .setURL(authUrl),
-                        new ButtonBuilder()
-                            .setCustomId('sp_confirm_auth')
-                            .setLabel("I've Authorized")
-                            .setEmoji('✅')
-                            .setStyle(ButtonStyle.Success)
+                            .setURL(authUrl)
                     )
                 );
 
-            const msg = await interaction.reply({
+            await interaction.reply({
                 components: [connectContainer],
                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
-                fetchReply: true,
             });
 
-            const btnCollector = msg.createMessageComponentCollector({
-                filter: i => i.user.id === user.id && i.customId === 'sp_confirm_auth',
-                time: 600_000,
-                max: 5,
-            });
+            // Auto-poll: detect when OAuth completes and update message automatically
+            const maxWait = 5 * 60 * 1000;
+            const pollMs = 3000;
+            const start = Date.now();
 
-            btnCollector.on('collect', async (i) => {
-                await i.deferUpdate();
+            while (Date.now() - start < maxWait) {
+                await new Promise(r => setTimeout(r, pollMs));
                 const record = await SpotifyProfile.findOne({ where: { userId: user.id } });
-
-                if (!record?.accessToken) {
-                    const c = new ContainerBuilder().addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(
-                            `${emojis.error} **Not authorized yet.**\nPlease click **Login with Spotify** first, authorize in your browser, then come back and click ✅ again.`
-                        )
-                    );
-                    await i.editReply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
-                    return;
-                }
+                if (!record?.accessToken) continue;
 
                 let count = 0;
-                try { const d = await getSpotifyPlaylists(user.id, 1, 0); count = d.total ?? 0; } catch {}
+                try {
+                    const d = await getSpotifyPlaylists(user.id, 1, 0);
+                    count = d.total ?? 0;
+                } catch (err) {
+                    if (err.message?.includes('403')) {
+                        const c = new ContainerBuilder()
+                            .addTextDisplayComponents(
+                                new TextDisplayBuilder().setContent(
+                                    `✅ **Spotify Connected** as **${record.displayName || record.spotifyUserId}**!\n\n` +
+                                    `⚠️ Playlist access is restricted because your Spotify app is in **Development Mode**.\n` +
+                                    `-# Fix: Go to Spotify Developer Dashboard → your app → **User Management** → add your Spotify account email.`
+                                )
+                            );
+                        await interaction.editReply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
+                        return;
+                    }
+                }
 
-                const profileMsg = await i.editReply({
+                const profileMsg = await interaction.editReply({
                     components: [buildProfileContainer(record, count)],
                     flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
                 });
-                btnCollector.stop();
                 await setupProfileSession(profileMsg, record, user.id, client);
-            });
+                return;
+            }
 
+            // Timed out
+            try {
+                const expired = new ContainerBuilder().addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`⏰ **Login Expired**\nThe session timed out. Run \`/spotify login\` again.`)
+                );
+                await interaction.editReply({ components: [expired], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
+            } catch {}
             return;
         }
 
