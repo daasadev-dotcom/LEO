@@ -426,31 +426,28 @@ module.exports = {
 
                     await submitted.deferUpdate();
 
-                    // Fetch public profile
-                    let profile;
-                    try {
-                        profile = await fetchPublicUserProfile(spotifyUserId);
-                    } catch (err) {
-                        const errStatus = err.message?.match(/(\d+)/)?.[1];
-                        const msg404 = errStatus === '404'
-                            ? 'Spotify user not found. Check your URL and try again.'
-                            : `Could not fetch Spotify profile. Error: ${err.message}`;
-                        const c = new ContainerBuilder().addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent(`${emojis.error} ${msg404}`)
-                        );
-                        await submitted.editReply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
-                        return;
-                    }
+                    // Store profile using just the URL — no API call needed.
+                    // Spotify restricts GET /v1/users/{id} for client credentials on many accounts.
+                    // We use the extracted user ID as the display name (same as reference bots).
+                    const profileUrl = `https://open.spotify.com/user/${spotifyUserId}`;
 
-                    const dName = profile.display_name || profile.id || 'Spotify User';
-                    const imageUrl = profile.images?.[0]?.url ?? null;
-                    const profileUrl = profile.external_urls?.spotify ?? 'https://open.spotify.com';
-                    const followersCount = profile.followers?.total ?? 0;
+                    // Try to fetch display name and avatar from public profile — optional, ignore errors
+                    let dName = spotifyUserId;
+                    let imageUrl = null;
+                    let followersCount = 0;
+                    try {
+                        const profile = await fetchPublicUserProfile(spotifyUserId);
+                        dName = profile.display_name || profile.id || spotifyUserId;
+                        imageUrl = profile.images?.[0]?.url ?? null;
+                        followersCount = profile.followers?.total ?? 0;
+                    } catch {
+                        // 403 or not found — just use the user ID as the name, that's fine
+                    }
 
                     // Store in DB
                     await SpotifyProfile.upsert({
                         userId: user.id,
-                        spotifyUserId: profile.id,
+                        spotifyUserId,
                         displayName: dName,
                         imageUrl,
                         profileUrl,
