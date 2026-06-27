@@ -4,6 +4,8 @@ const Playlist = require('./Playlist');
 const PlaylistTrack = require('./PlaylistTrack');
 const NoPrefix = require('./NoPrefix');
 const GuildPrefix = require('./GuildPrefix');
+const GuildTwentyFourSeven = require('./GuildTwentyFourSeven');
+const SpotifyProfile = require('./SpotifyProfile');
 
 const models = {
     Favorite,
@@ -11,6 +13,8 @@ const models = {
     PlaylistTrack,
     NoPrefix,
     GuildPrefix,
+    GuildTwentyFourSeven,
+    SpotifyProfile,
     sequelize
 };
 

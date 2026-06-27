@@ -2,6 +2,7 @@ const { ContainerBuilder, TextDisplayBuilder, SectionBuilder, ThumbnailBuilder, 
 const { hexToDecimal } = require('../helpers/colorHelper');
 const { MusicCard } = require('../helpers/MusicCard');
 const Favorite = require('../database/models/Favorite');
+const GuildTwentyFourSeven = require('../database/models/GuildTwentyFourSeven');
 const config = require('../config');
 const emojis = require('../utils/emojis');
 
@@ -685,7 +686,10 @@ function setupMusicEvents(client) {
 
     client.poru.on('queueEnd', async (player) => {
         if (player.updateInterval) clearInterval(player.updateInterval);
-        
+
+        const g247 = await GuildTwentyFourSeven.findOne({ where: { guildId: player.guildId, enabled: true } }).catch(() => null);
+        if (g247) return;
+
         if (!player.autoplayEnabled) return;
 
         const lastTrack = player._lastPlayedTrack || player.currentTrack;
@@ -820,16 +824,34 @@ function setupMusicEvents(client) {
         }
     });
 
-    client.poru.on('playerDestroy', (player) => {
+    client.poru.on('playerDestroy', async (player) => {
         if (player.updateInterval) clearInterval(player.updateInterval);
         if (player.buttonCollector) {
-            try {
-                player.buttonCollector.stop();
-            } catch (e) {}
+            try { player.buttonCollector.stop(); } catch (e) {}
         }
         if (player._autoplayHistory) {
             player._autoplayHistory.clear();
         }
+
+        const g247 = await GuildTwentyFourSeven.findOne({ where: { guildId: player.guildId, enabled: true } }).catch(() => null);
+        if (!g247) return;
+
+        setTimeout(async () => {
+            try {
+                const guild = client.guilds.cache.get(g247.guildId);
+                if (!guild) return;
+                const voiceChannel = guild.channels.cache.get(g247.voiceChannelId);
+                if (!voiceChannel) return;
+                const existing = client.poru.players.get(g247.guildId);
+                if (existing) return;
+                client.poru.createConnection({
+                    guildId: g247.guildId,
+                    voiceChannel: g247.voiceChannelId,
+                    textChannel: g247.textChannelId,
+                    deaf: true,
+                });
+            } catch (e) {}
+        }, 3000);
     });
 }
 
