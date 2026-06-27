@@ -1,0 +1,1 @@
+- [Spotify integration approach](spotify-approach.md) — uses Client Credentials (not OAuth); modal URL input, no redirect URI needed

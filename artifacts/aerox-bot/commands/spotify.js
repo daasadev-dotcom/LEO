@@ -2,12 +2,12 @@ const {
     SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SectionBuilder,
     ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder,
     ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
+    ModalBuilder, TextInputBuilder, TextInputStyle,
     MessageFlags
 } = require('discord.js');
 const emojis = require('../utils/emojis');
 const SpotifyProfile = require('../database/models/SpotifyProfile');
-const SpotifyAuthState = require('../database/models/SpotifyAuthState');
-const { buildAuthUrl, generateState, getSpotifyPlaylists } = require('../helpers/spotifyHelper');
+const { fetchPublicUserProfile, extractSpotifyUserId, getSpotifyPlaylists, getPublicPlaylists } = require('../helpers/spotifyHelper');
 
 const PAGE = 8;
 
@@ -24,7 +24,7 @@ function noCredsContainer() {
 }
 
 function displayName(record) {
-    return record.displayName || record.spotifyUserId || 'Spotify User';
+    return record?.displayName || record?.spotifyUserId || 'Spotify User';
 }
 
 function buildProfileContainer(record, playlistCount) {
@@ -72,8 +72,10 @@ function buildProfileContainer(record, playlistCount) {
     return container;
 }
 
-async function fetchAndBuildPlaylistsContainer(userId, name, offset) {
-    const data = await getSpotifyPlaylists(userId, PAGE, offset);
+async function fetchAndBuildPlaylistsContainer(record, offset) {
+    const spotifyUserId = record.spotifyUserId;
+    const name = displayName(record);
+    const data = await getPublicPlaylists(spotifyUserId, PAGE, offset);
     const playlists = (data.items ?? []).filter(Boolean);
     const total = data.total ?? 0;
 
@@ -86,7 +88,7 @@ async function fetchAndBuildPlaylistsContainer(userId, name, offset) {
         .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
 
     if (playlists.length === 0) {
-        container.addTextDisplayComponents(new TextDisplayBuilder().setContent('No playlists found.'));
+        container.addTextDisplayComponents(new TextDisplayBuilder().setContent('No public playlists found.'));
     } else {
         for (let i = 0; i < playlists.length; i++) {
             const pl = playlists[i];
@@ -186,7 +188,6 @@ async function setupProfileSession(msg, record, userId, client) {
     let currentPlaylists = [];
     let currentOffset = 0;
     let currentPlaylist = null;
-    const name = displayName(record);
 
     const collector = msg.createMessageComponentCollector({
         filter: i => i.user.id === userId,
@@ -197,42 +198,47 @@ async function setupProfileSession(msg, record, userId, client) {
         try {
             if (i.customId === 'sp_view_playlists') {
                 await i.deferUpdate();
-                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(userId, name, 0);
+                const freshRecord = await SpotifyProfile.findOne({ where: { userId } });
+                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(freshRecord ?? record, 0);
                 currentPlaylists = playlists;
                 currentOffset = offset;
                 await i.editReply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
 
             } else if (i.customId === 'sp_next_page') {
                 await i.deferUpdate();
-                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(userId, name, currentOffset + PAGE);
+                const freshRecord = await SpotifyProfile.findOne({ where: { userId } });
+                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(freshRecord ?? record, currentOffset + PAGE);
                 currentPlaylists = playlists;
                 currentOffset = offset;
                 await i.editReply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
 
             } else if (i.customId === 'sp_prev_page') {
                 await i.deferUpdate();
-                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(userId, name, Math.max(0, currentOffset - PAGE));
+                const freshRecord = await SpotifyProfile.findOne({ where: { userId } });
+                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(freshRecord ?? record, Math.max(0, currentOffset - PAGE));
                 currentPlaylists = playlists;
                 currentOffset = offset;
                 await i.editReply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
 
             } else if (i.customId === 'sp_back_to_profile') {
                 await i.deferUpdate();
-                let count = 0;
-                try { const d = await getSpotifyPlaylists(userId, 1, 0); count = d.total ?? 0; } catch {}
                 const freshRecord = await SpotifyProfile.findOne({ where: { userId } });
-                await i.editReply({ components: [buildProfileContainer(freshRecord ?? record, count)], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
+                const r = freshRecord ?? record;
+                let count = 0;
+                try { const d = await getPublicPlaylists(r.spotifyUserId, 1, 0); count = d.total ?? 0; } catch {}
+                await i.editReply({ components: [buildProfileContainer(r, count)], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
 
             } else if (i.customId === 'sp_select_playlist') {
                 const { idx } = JSON.parse(i.values[0]);
                 const pl = currentPlaylists[idx];
                 if (!pl) return i.deferUpdate();
                 currentPlaylist = pl;
-                await i.update({ components: [buildPlaylistDetailContainer(pl, name)], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
+                await i.update({ components: [buildPlaylistDetailContainer(pl, displayName(record))], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
 
             } else if (i.customId === 'sp_back_to_list') {
                 await i.deferUpdate();
-                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(userId, name, currentOffset);
+                const freshRecord = await SpotifyProfile.findOne({ where: { userId } });
+                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(freshRecord ?? record, currentOffset);
                 currentPlaylists = playlists;
                 currentOffset = offset;
                 await i.editReply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
@@ -288,25 +294,27 @@ async function setupProfileSession(msg, record, userId, client) {
                 const confirmMsg = await i.reply({
                     components: [buildDisconnectConfirmContainer()],
                     flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
-                    fetchReply: true,
+                    withResponse: true,
                 });
-                const confirmCol = confirmMsg.createMessageComponentCollector({
+                const confirmCol = confirmMsg.resource?.message?.createMessageComponentCollector({
                     filter: ci => ci.user.id === userId,
                     time: 60_000,
                     max: 1,
                 });
-                confirmCol.on('collect', async (ci) => {
-                    if (ci.customId === 'sp_confirm_dc') {
-                        await SpotifyProfile.destroy({ where: { userId } });
-                        const c = new ContainerBuilder().addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent(`✅ **Disconnected**\nYour Spotify profile has been unlinked.`)
-                        );
-                        await ci.update({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
-                        collector.stop();
-                    } else {
-                        await ci.deferUpdate();
-                    }
-                });
+                if (confirmCol) {
+                    confirmCol.on('collect', async (ci) => {
+                        if (ci.customId === 'sp_confirm_dc') {
+                            await SpotifyProfile.destroy({ where: { userId } });
+                            const c = new ContainerBuilder().addTextDisplayComponents(
+                                new TextDisplayBuilder().setContent(`✅ **Disconnected**\nYour Spotify profile has been unlinked.`)
+                            );
+                            await ci.update({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
+                            collector.stop();
+                        } else {
+                            await ci.deferUpdate();
+                        }
+                    });
+                }
             }
         } catch (err) {
             console.error('[Spotify] Session error:', err.message);
@@ -343,127 +351,173 @@ module.exports = {
         // ─── LOGIN ────────────────────────────────────────────────────────────
         if (sub === 'login') {
             const existing = await SpotifyProfile.findOne({ where: { userId: user.id } });
-            if (existing?.accessToken) {
+            if (existing?.spotifyUserId) {
                 const c = new ContainerBuilder().addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
-                        `ℹ️ **Already Connected**\nYou already have a Spotify profile linked. Use \`/spotify logout\` to disconnect first.`
+                        `ℹ️ **Already Connected**\nYou already have a Spotify profile linked as **${displayName(existing)}**. Use \`/spotify logout\` to disconnect first.`
                     )
                 );
                 return interaction.reply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
             }
 
-            const state = generateState();
-            await SpotifyAuthState.create({
-                state,
-                userId: user.id,
-                expiresAt: Date.now() + 10 * 60 * 1000,
-            });
-
-            const { url: authUrl, redirectUri } = buildAuthUrl(state);
-
+            // Show connect card with "Enter Spotify URL" button
             const connectContainer = new ContainerBuilder()
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
-                        `## 🎵 Connect Spotify\nClick **Login with Spotify** and authorize in your browser.\nThis message will update automatically once you're connected.\n\n` +
-                        `-# Redirect URI: \`${redirectUri}\``
+                        `## 🎵 Connect Spotify\nClick the button below to link your Spotify profile`
                     )
                 )
                 .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
                 .addActionRowComponents(
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
-                            .setLabel('Login with Spotify')
+                            .setCustomId('sp_enter_url')
+                            .setLabel('Enter Spotify URL')
                             .setEmoji('🎵')
-                            .setStyle(ButtonStyle.Link)
-                            .setURL(authUrl)
+                            .setStyle(ButtonStyle.Primary)
                     )
                 );
 
-            await interaction.reply({
+            const msg = await interaction.reply({
                 components: [connectContainer],
                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
+                withResponse: true,
             });
 
-            // Auto-poll: detect when OAuth completes and update message automatically
-            const maxWait = 5 * 60 * 1000;
-            const pollMs = 3000;
-            const start = Date.now();
+            const replyMsg = msg.resource?.message;
+            if (!replyMsg) return;
 
-            while (Date.now() - start < maxWait) {
-                await new Promise(r => setTimeout(r, pollMs));
-                const record = await SpotifyProfile.findOne({ where: { userId: user.id } });
-                if (!record?.accessToken) continue;
+            const btnCollector = replyMsg.createMessageComponentCollector({
+                filter: i => i.user.id === user.id && i.customId === 'sp_enter_url',
+                time: 600_000,
+                max: 5,
+            });
 
-                let count = 0;
+            btnCollector.on('collect', async (btnI) => {
+                // Show modal
+                const modal = new ModalBuilder()
+                    .setCustomId('sp_url_modal')
+                    .setTitle('Connect Spotify')
+                    .addComponents(
+                        new ActionRowBuilder().addComponents(
+                            new TextInputBuilder()
+                                .setCustomId('spotify_url')
+                                .setLabel('Spotify Profile URL or Username')
+                                .setStyle(TextInputStyle.Short)
+                                .setPlaceholder('https://open.spotify.com/user/...')
+                                .setRequired(true)
+                        )
+                    );
+
+                await btnI.showModal(modal);
+
                 try {
-                    const d = await getSpotifyPlaylists(user.id, 1, 0);
-                    count = d.total ?? 0;
-                } catch (err) {
-                    if (err.message?.includes('403')) {
-                        const c = new ContainerBuilder()
-                            .addTextDisplayComponents(
-                                new TextDisplayBuilder().setContent(
-                                    `✅ **Spotify Connected** as **${record.displayName || record.spotifyUserId}**!\n\n` +
-                                    `⚠️ Playlist access is restricted because your Spotify app is in **Development Mode**.\n` +
-                                    `-# Fix: Go to Spotify Developer Dashboard → your app → **User Management** → add your Spotify account email.`
-                                )
-                            );
-                        await interaction.editReply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
+                    const submitted = await btnI.awaitModalSubmit({ time: 120_000 });
+                    const input = submitted.fields.getTextInputValue('spotify_url').trim();
+                    const spotifyUserId = extractSpotifyUserId(input);
+
+                    if (!spotifyUserId) {
+                        await submitted.reply({
+                            content: `${emojis.error} Invalid Spotify URL. Use the format: \`https://open.spotify.com/user/YOUR_ID\``,
+                            ephemeral: true,
+                        });
                         return;
                     }
+
+                    await submitted.deferUpdate();
+
+                    // Fetch public profile
+                    let profile;
+                    try {
+                        profile = await fetchPublicUserProfile(spotifyUserId);
+                    } catch (err) {
+                        const errStatus = err.message?.match(/(\d+)/)?.[1];
+                        const msg404 = errStatus === '404'
+                            ? 'Spotify user not found. Check your URL and try again.'
+                            : `Could not fetch Spotify profile. Error: ${err.message}`;
+                        const c = new ContainerBuilder().addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent(`${emojis.error} ${msg404}`)
+                        );
+                        await submitted.editReply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
+                        return;
+                    }
+
+                    const dName = profile.display_name || profile.id || 'Spotify User';
+                    const imageUrl = profile.images?.[0]?.url ?? null;
+                    const profileUrl = profile.external_urls?.spotify ?? 'https://open.spotify.com';
+                    const followersCount = profile.followers?.total ?? 0;
+
+                    // Store in DB
+                    await SpotifyProfile.upsert({
+                        userId: user.id,
+                        spotifyUserId: profile.id,
+                        displayName: dName,
+                        imageUrl,
+                        profileUrl,
+                        followersCount,
+                        accessToken: null,
+                        refreshToken: null,
+                        tokenExpiry: 0,
+                    });
+
+                    btnCollector.stop();
+
+                    // Fetch playlist count and show profile
+                    let count = 0;
+                    try { const d = await getPublicPlaylists(profile.id, 1, 0); count = d.total ?? 0; } catch {}
+
+                    const record = await SpotifyProfile.findOne({ where: { userId: user.id } });
+                    const profileMsg = await submitted.editReply({
+                        components: [buildProfileContainer(record, count)],
+                        flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
+                    });
+
+                    await setupProfileSession(profileMsg, record, user.id, client);
+                } catch (err) {
+                    if (err.message?.includes('time')) return; // modal timed out
+                    console.error('[Spotify] Modal error:', err.message);
                 }
+            });
 
-                const profileMsg = await interaction.editReply({
-                    components: [buildProfileContainer(record, count)],
-                    flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
-                });
-                await setupProfileSession(profileMsg, record, user.id, client);
-                return;
-            }
-
-            // Timed out
-            try {
-                const expired = new ContainerBuilder().addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(`⏰ **Login Expired**\nThe session timed out. Run \`/spotify login\` again.`)
-                );
-                await interaction.editReply({ components: [expired], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
-            } catch {}
             return;
         }
 
         // ─── PROFILE ─────────────────────────────────────────────────────────
         if (sub === 'profile') {
             const record = await SpotifyProfile.findOne({ where: { userId: user.id } });
-            if (!record?.accessToken) {
+            if (!record?.spotifyUserId) {
                 const c = new ContainerBuilder().addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(`ℹ️ **No Spotify Linked**\nUse \`/spotify login\` to connect your account.`)
                 );
                 return interaction.reply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
             }
             let count = 0;
-            try { const d = await getSpotifyPlaylists(user.id, 1, 0); count = d.total ?? 0; } catch {}
+            try { const d = await getPublicPlaylists(record.spotifyUserId, 1, 0); count = d.total ?? 0; } catch {}
             const profileMsg = await interaction.reply({
                 components: [buildProfileContainer(record, count)],
                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
-                fetchReply: true,
+                withResponse: true,
             });
-            await setupProfileSession(profileMsg, record, user.id, client);
+            await setupProfileSession(profileMsg.resource?.message, record, user.id, client);
             return;
         }
 
         // ─── PLAYLISTS ────────────────────────────────────────────────────────
         if (sub === 'playlists') {
             const record = await SpotifyProfile.findOne({ where: { userId: user.id } });
-            if (!record?.accessToken) {
+            if (!record?.spotifyUserId) {
                 const c = new ContainerBuilder().addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(`${emojis.error} No Spotify linked. Use \`/spotify login\` first.`)
                 );
                 return interaction.reply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
             }
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            await interaction.deferReply();
             try {
-                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(user.id, displayName(record), 0);
-                const playlistsMsg = await interaction.editReply({ components: [container], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
+                const { container, playlists, offset } = await fetchAndBuildPlaylistsContainer(record, 0);
+                const playlistsMsg = await interaction.editReply({
+                    components: [container],
+                    flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
+                });
                 await setupProfileSession(playlistsMsg, record, user.id, client);
             } catch (err) {
                 const c = new ContainerBuilder().addTextDisplayComponents(
@@ -477,20 +531,44 @@ module.exports = {
         // ─── LOGOUT ───────────────────────────────────────────────────────────
         if (sub === 'logout') {
             const record = await SpotifyProfile.findOne({ where: { userId: user.id } });
-            if (!record) {
+            if (!record?.spotifyUserId) {
                 const c = new ContainerBuilder().addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(`${emojis.error} You don't have a Spotify account linked.`)
+                    new TextDisplayBuilder().setContent(`ℹ️ You don't have a Spotify profile linked.`)
                 );
                 return interaction.reply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, ephemeral: true });
             }
-            const msg = await interaction.reply({
-                components: [buildDisconnectConfirmContainer()],
+
+            const logoutContainer = new ContainerBuilder()
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(
+                        `🎵 **Disconnect Spotify**\nAre you sure you want to unlink **${displayName(record)}**?`
+                    )
+                )
+                .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
+                .addActionRowComponents(
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('sp_confirm_logout').setLabel('Disconnect').setStyle(ButtonStyle.Danger),
+                        new ButtonBuilder().setCustomId('sp_cancel_logout').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+                    )
+                );
+
+            const logoutResp = await interaction.reply({
+                components: [logoutContainer],
                 flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
-                fetchReply: true,
+                withResponse: true,
             });
-            const col = msg.createMessageComponentCollector({ filter: i => i.user.id === user.id, time: 60_000, max: 1 });
-            col.on('collect', async (i) => {
-                if (i.customId === 'sp_confirm_dc') {
+
+            const logoutMsg = logoutResp.resource?.message;
+            if (!logoutMsg) return;
+
+            const logoutCol = logoutMsg.createMessageComponentCollector({
+                filter: i => i.user.id === user.id,
+                time: 60_000,
+                max: 1,
+            });
+
+            logoutCol.on('collect', async (i) => {
+                if (i.customId === 'sp_confirm_logout') {
                     await SpotifyProfile.destroy({ where: { userId: user.id } });
                     const c = new ContainerBuilder().addTextDisplayComponents(
                         new TextDisplayBuilder().setContent(`✅ **Disconnected**\nYour Spotify profile has been unlinked.`)
@@ -498,6 +576,10 @@ module.exports = {
                     await i.update({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
                 } else {
                     await i.deferUpdate();
+                    const c = new ContainerBuilder().addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent(`ℹ️ Cancelled. Your Spotify profile is still linked.`)
+                    );
+                    await i.editReply({ components: [c], flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2 });
                 }
             });
             return;
