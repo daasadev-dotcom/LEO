@@ -38,3 +38,9 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+SPOTIFY_CLIENT_ID = "165ad246c9b24506a0d9bbb3f32620ae"
+SPOTIFY_CLIENT_SECRET = "947d571f2129439785d1028686e354a1"
