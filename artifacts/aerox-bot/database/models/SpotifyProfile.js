@@ -13,6 +13,9 @@ class SpotifyProfile extends BaseModel {
                 imageUrl: { type: DataTypes.STRING, allowNull: true },
                 profileUrl: { type: DataTypes.STRING, allowNull: false },
                 followersCount: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
+                accessToken: { type: DataTypes.TEXT, allowNull: true },
+                refreshToken: { type: DataTypes.TEXT, allowNull: true },
+                tokenExpiry: { type: DataTypes.BIGINT, allowNull: true },
             },
             {
                 sequelize,
@@ -26,5 +29,4 @@ class SpotifyProfile extends BaseModel {
 }
 
 SpotifyProfile.init(sequelize);
-
 module.exports = SpotifyProfile;
