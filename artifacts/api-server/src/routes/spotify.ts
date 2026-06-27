@@ -4,7 +4,7 @@ import path from "path";
 
 const router = Router();
 
-const DB_PATH = path.join(process.cwd(), "artifacts/aerox-bot/database/aerox_music.db");
+const DB_PATH = path.join(process.cwd(), "../aerox-bot/database/aerox_music.db");
 
 function openDb() {
   return new Database(DB_PATH, { timeout: 5000 });
