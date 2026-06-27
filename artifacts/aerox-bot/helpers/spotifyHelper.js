@@ -1,58 +1,93 @@
-// Client Credentials token cache (shared app token, no per-user OAuth needed)
-let _clientToken = null;
-let _clientTokenExpiry = 0;
+const { randomUUID } = require('crypto');
 
-async function getClientToken() {
-    if (_clientToken && Date.now() < _clientTokenExpiry) return _clientToken;
+function getRedirectUri() {
+    const domain = (process.env.REPLIT_DOMAINS?.split(',')[0] ?? process.env.REPLIT_DEV_DOMAIN ?? '').trim();
+    return `https://${domain}/api/spotify/callback`;
+}
 
+function buildAuthUrl(state) {
+    const clientId = process.env.SPOTIFY_CLIENT_ID;
+    const redirectUri = getRedirectUri();
+    const scopes = 'user-read-private playlist-read-private playlist-read-collaborative';
+    const params = new URLSearchParams({
+        client_id: clientId,
+        response_type: 'code',
+        redirect_uri: redirectUri,
+        scope: scopes,
+        state,
+    });
+    return { url: `https://accounts.spotify.com/authorize?${params}`, redirectUri };
+}
+
+function generateState() {
+    return randomUUID();
+}
+
+async function refreshAccessToken(profile) {
     const clientId = process.env.SPOTIFY_CLIENT_ID;
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-    if (!clientId || !clientSecret) throw new Error('SPOTIFY_CREDENTIALS_MISSING');
-
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+
     const res = await fetch('https://accounts.spotify.com/api/token', {
         method: 'POST',
         headers: {
             Authorization: `Basic ${credentials}`,
             'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: 'grant_type=client_credentials',
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: profile.refreshToken }).toString(),
     });
-    if (!res.ok) throw new Error(`Spotify token fetch failed: ${res.status}`);
+
+    if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`);
+
     const data = await res.json();
-    _clientToken = data.access_token;
-    _clientTokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
-    return _clientToken;
+    const newExpiry = Date.now() + (data.expires_in - 60) * 1000;
+
+    const SpotifyProfile = require('../database/models/SpotifyProfile');
+    await SpotifyProfile.update(
+        { accessToken: data.access_token, tokenExpiry: newExpiry },
+        { where: { userId: profile.userId } }
+    );
+
+    return data.access_token;
 }
 
-function extractSpotifyUserId(input) {
-    input = (input ?? '').trim();
-    // Handle full URL: https://open.spotify.com/user/USERNAME
-    const match = input.match(/open\.spotify\.com\/user\/([^?/\s]+)/);
-    if (match) return match[1];
-    // Handle plain username/id (no slashes or dots that would indicate a URL)
-    if (input && !input.includes('/') && !input.startsWith('http')) return input;
-    return null;
+async function getOAuthToken(userId) {
+    const SpotifyProfile = require('../database/models/SpotifyProfile');
+    const profile = await SpotifyProfile.findOne({ where: { userId } });
+
+    if (!profile?.accessToken) throw new Error('SPOTIFY_NOT_LINKED');
+
+    if (Date.now() < Number(profile.tokenExpiry)) {
+        return profile.accessToken;
+    }
+
+    return refreshAccessToken(profile);
 }
 
-async function getSpotifyUserById(spotifyUserId) {
-    const token = await getClientToken();
-    const res = await fetch(`https://api.spotify.com/v1/users/${encodeURIComponent(spotifyUserId)}`, {
+async function getSpotifyUser(userId) {
+    const token = await getOAuthToken(userId);
+    const res = await fetch('https://api.spotify.com/v1/me', {
         headers: { Authorization: `Bearer ${token}` },
     });
-    if (res.status === 404) throw new Error('SPOTIFY_USER_NOT_FOUND');
     if (!res.ok) throw new Error(`SPOTIFY_API_ERROR:${res.status}`);
     return res.json();
 }
 
-async function getSpotifyPlaylistsByUserId(spotifyUserId, limit = 10, offset = 0) {
-    const token = await getClientToken();
+async function getSpotifyPlaylists(userId, limit = 10, offset = 0) {
+    const token = await getOAuthToken(userId);
     const res = await fetch(
-        `https://api.spotify.com/v1/users/${encodeURIComponent(spotifyUserId)}/playlists?limit=${limit}&offset=${offset}`,
+        `https://api.spotify.com/v1/me/playlists?limit=${limit}&offset=${offset}`,
         { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!res.ok) throw new Error(`SPOTIFY_API_ERROR:${res.status}`);
     return res.json();
 }
 
-module.exports = { extractSpotifyUserId, getSpotifyUserById, getSpotifyPlaylistsByUserId };
+function extractSpotifyUserId(input) {
+    input = (input ?? '').trim();
+    const match = input.match(/open\.spotify\.com\/user\/([^?/\s]+)/);
+    if (match) return match[1];
+    return null;
+}
+
+module.exports = { buildAuthUrl, generateState, getOAuthToken, getSpotifyUser, getSpotifyPlaylists, extractSpotifyUserId };
