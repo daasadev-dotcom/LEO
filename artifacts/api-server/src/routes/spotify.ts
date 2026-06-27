@@ -1,14 +1,8 @@
 import { Router, type Request, type Response } from "express";
-import Database from "better-sqlite3";
-import path from "path";
 
 const router = Router();
 
-const DB_PATH = path.join(process.cwd(), "../aerox-bot/database/aerox_music.db");
-
-function openDb() {
-  return new Database(DB_PATH, { timeout: 5000 });
-}
+const BOT_INTERNAL = "http://127.0.0.1:3939";
 
 function successHtml(name: string) {
   return `<!DOCTYPE html>
@@ -85,23 +79,22 @@ router.get("/spotify/callback", async (req: Request, res: Response) => {
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return res.status(500).send(errorHtml("Bot is not configured with Spotify credentials. Ask the bot owner to set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET."));
+    return res.status(500).send(errorHtml("Bot is not configured with Spotify credentials."));
   }
 
-  let db: Database.Database | null = null;
   try {
-    db = openDb();
-
-    const authState = db
-      .prepare("SELECT userId, expiresAt FROM spotify_auth_states WHERE state = ?")
-      .get(state) as { userId: string; expiresAt: number } | undefined;
-
-    if (!authState || Date.now() > Number(authState.expiresAt)) {
+    // 1. Validate the state via the bot's internal server
+    const stateRes = await fetch(`${BOT_INTERNAL}/spotify/validate-state?state=${encodeURIComponent(state)}`);
+    if (!stateRes.ok) {
       return res.send(errorHtml("Auth session expired or not found. Please run /spotify login again in Discord."));
     }
+    const stateData = await stateRes.json() as { ok: boolean; userId?: string; error?: string };
+    if (!stateData.ok || !stateData.userId) {
+      return res.send(errorHtml("Auth session expired or not found. Please run /spotify login again in Discord."));
+    }
+    const userId = stateData.userId;
 
-    const userId = authState.userId;
-
+    // 2. Exchange code for tokens with Spotify
     const domain = (process.env.REPLIT_DOMAINS?.split(",")[0] ?? process.env.REPLIT_DEV_DOMAIN ?? "").trim();
     const redirectUri = `https://${domain}/api/spotify/callback`;
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
@@ -121,22 +114,23 @@ router.get("/spotify/callback", async (req: Request, res: Response) => {
       return res.send(errorHtml("Failed to get Spotify access token. Please try again."));
     }
 
-    const tokenData = (await tokenRes.json()) as { access_token: string; refresh_token: string; expires_in: number };
+    const tokenData = await tokenRes.json() as { access_token: string; refresh_token: string; expires_in: number };
     const { access_token, refresh_token, expires_in } = tokenData;
     const tokenExpiry = Date.now() + (expires_in - 60) * 1000;
 
-    const profileRes = await fetch("https://api.spotify.com/v1/me", {
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
-
+    // 3. Fetch the user's Spotify profile
     let displayName = "Spotify User";
     let imageUrl: string | null = null;
     let spotifyUserId = userId;
     let profileUrl = "https://open.spotify.com";
     let followersCount = 0;
 
+    const profileRes = await fetch("https://api.spotify.com/v1/me", {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+
     if (profileRes.ok) {
-      const p = (await profileRes.json()) as {
+      const p = await profileRes.json() as {
         id: string; display_name?: string; images?: { url: string }[];
         external_urls?: { spotify: string }; followers?: { total: number };
       };
@@ -147,32 +141,23 @@ router.get("/spotify/callback", async (req: Request, res: Response) => {
       followersCount = p.followers?.total ?? 0;
     }
 
-    const now = new Date().toISOString();
-    const existing = db.prepare("SELECT id FROM spotify_profiles WHERE userId = ?").get(userId);
+    // 4. Send everything to the bot's internal server to store
+    const storeRes = await fetch(`${BOT_INTERNAL}/spotify/store-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, spotifyUserId, displayName, imageUrl, profileUrl, followersCount, accessToken: access_token, refreshToken: refresh_token, tokenExpiry }),
+    });
 
-    if (existing) {
-      db.prepare(`
-        UPDATE spotify_profiles
-        SET spotifyUserId = ?, displayName = ?, imageUrl = ?, profileUrl = ?,
-            followersCount = ?, accessToken = ?, refreshToken = ?, tokenExpiry = ?, updatedAt = ?
-        WHERE userId = ?
-      `).run(spotifyUserId, displayName, imageUrl, profileUrl, followersCount, access_token, refresh_token, tokenExpiry, now, userId);
-    } else {
-      db.prepare(`
-        INSERT INTO spotify_profiles
-          (userId, spotifyUserId, displayName, imageUrl, profileUrl, followersCount, accessToken, refreshToken, tokenExpiry, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(userId, spotifyUserId, displayName, imageUrl, profileUrl, followersCount, access_token, refresh_token, tokenExpiry, now, now);
+    if (!storeRes.ok) {
+      const errData = await storeRes.json().catch(() => ({ error: "unknown" })) as { error?: string };
+      console.error("[Spotify OAuth] Bot store failed:", errData.error);
+      return res.send(errorHtml("Failed to save your Spotify account. Please try again."));
     }
-
-    db.prepare("DELETE FROM spotify_auth_states WHERE state = ?").run(state);
 
     return res.send(successHtml(displayName));
   } catch (err) {
     console.error("[Spotify OAuth] Callback error:", err);
     return res.status(500).send(errorHtml("An internal error occurred. Please try again."));
-  } finally {
-    db?.close();
   }
 });
 

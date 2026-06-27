@@ -305,6 +305,75 @@ process.on('SIGINT', () => {
     process.exit(0);
 });
 
+// ── Internal HTTP server for OAuth callbacks ──────────────────────────────
+const http = require('http');
+
+const internalServer = http.createServer(async (req, res) => {
+    if (req.method === 'POST' && req.url === '/spotify/store-token') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                const { userId, spotifyUserId, displayName, imageUrl, profileUrl, followersCount, accessToken, refreshToken, tokenExpiry } = data;
+
+                const SpotifyProfile = require('./database/models/SpotifyProfile');
+                const SpotifyAuthState = require('./database/models/SpotifyAuthState');
+
+                await SpotifyProfile.upsert({
+                    userId,
+                    spotifyUserId,
+                    displayName,
+                    imageUrl: imageUrl || null,
+                    profileUrl,
+                    followersCount: followersCount || 0,
+                    accessToken,
+                    refreshToken,
+                    tokenExpiry,
+                });
+
+                // Clean up auth state
+                await SpotifyAuthState.destroy({ where: { userId } }).catch(() => {});
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true, displayName }));
+            } catch (err) {
+                console.error('[Internal] spotify/store-token error:', err.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    if (req.method === 'GET' && req.url.startsWith('/spotify/validate-state')) {
+        const url = new URL(req.url, 'http://localhost');
+        const state = url.searchParams.get('state');
+        try {
+            const SpotifyAuthState = require('./database/models/SpotifyAuthState');
+            const record = await SpotifyAuthState.findOne({ where: { state } });
+            if (!record || Date.now() > Number(record.expiresAt)) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'State not found or expired' }));
+            } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true, userId: record.userId }));
+            }
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: err.message }));
+        }
+        return;
+    }
+
+    res.writeHead(404);
+    res.end();
+});
+
+internalServer.listen(3939, '127.0.0.1', () => {
+    printSuccess('Internal callback server ready (port 3939)');
+});
+
 printLoading('Discord authentication');
 client.login(config.BOT_TOKEN).catch((error) => {
     printError(`Failed to login: ${error.message}`);
