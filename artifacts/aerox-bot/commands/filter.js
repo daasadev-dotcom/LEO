@@ -9,6 +9,12 @@ const parseEmoji = (str) => {
     return { animated: !!match[1], name: match[2], id: match[3] };
 };
 
+const getEmoji = (client, key, fallbackStr) => {
+    const app = client.appEmojiMap?.get(key);
+    if (app) return app;
+    return parseEmoji(fallbackStr);
+};
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('filter')
@@ -47,31 +53,31 @@ module.exports = {
         }
 
         const filterList = [
-            { id: 'reset',      label: 'Reset (No Filter)', emoji: emojis.filter,     description: 'Remove all active filters' },
-            { id: 'nightcore',  label: 'Nightcore',         emoji: emojis.nightcore,  description: 'Speeds up the audio with higher pitch' },
-            { id: 'vaporwave',  label: 'Vaporwave',         emoji: emojis.vaporwave,  description: 'Slows down the audio with lower pitch' },
-            { id: 'bassboost',  label: 'Bassboost',         emoji: emojis.bassboost,  description: 'Boosts the bass frequencies' },
-            { id: 'eightD',     label: '8D',                emoji: emojis.eightD,     description: 'Rotating 8D audio effect' },
-            { id: 'karaoke',    label: 'Karaoke',           emoji: emojis.karaoke,    description: 'Removes vocals from the track' },
-            { id: 'vibrato',    label: 'Vibrato',           emoji: emojis.vibrato,    description: 'Adds a vibrato effect' },
-            { id: 'tremolo',    label: 'Tremolo',           emoji: emojis.tremolo,    description: 'Adds a tremolo effect' },
-            { id: 'slowed',     label: 'Slowed',            emoji: emojis.slowed,     description: 'Slows down the audio' },
-            { id: 'distortion', label: 'Distortion',        emoji: emojis.distortion, description: 'Adds distortion to the audio' },
-            { id: 'pop',        label: 'Pop',               emoji: emojis.pop,        description: 'Pop equalizer preset' },
-            { id: 'soft',       label: 'Soft',              emoji: emojis.soft,       description: 'Soft equalizer preset' },
+            { id: 'reset',      label: 'Reset (No Filter)', emojiKey: 'filter',     fallback: emojis.filter,     description: 'Remove all active filters' },
+            { id: 'nightcore',  label: 'Nightcore',         emojiKey: 'nightcore',  fallback: emojis.nightcore,  description: 'Speeds up the audio with higher pitch' },
+            { id: 'vaporwave',  label: 'Vaporwave',         emojiKey: 'vaporwave',  fallback: emojis.vaporwave,  description: 'Slows down the audio with lower pitch' },
+            { id: 'bassboost',  label: 'Bassboost',         emojiKey: 'bassboost',  fallback: emojis.bassboost,  description: 'Boosts the bass frequencies' },
+            { id: 'eightD',     label: '8D',                emojiKey: 'eightD',     fallback: emojis.eightD,     description: 'Rotating 8D audio effect' },
+            { id: 'karaoke',    label: 'Karaoke',           emojiKey: 'karaoke',    fallback: emojis.karaoke,    description: 'Removes vocals from the track' },
+            { id: 'vibrato',    label: 'Vibrato',           emojiKey: 'vibrato',    fallback: emojis.vibrato,    description: 'Adds a vibrato effect' },
+            { id: 'tremolo',    label: 'Tremolo',           emojiKey: 'tremolo',    fallback: emojis.tremolo,    description: 'Adds a tremolo effect' },
+            { id: 'slowed',     label: 'Slowed',            emojiKey: 'slowed',     fallback: emojis.slowed,     description: 'Slows down the audio' },
+            { id: 'distortion', label: 'Distortion',        emojiKey: 'distortion', fallback: emojis.distortion, description: 'Adds distortion to the audio' },
+            { id: 'pop',        label: 'Pop',               emojiKey: 'pop',        fallback: emojis.pop,        description: 'Pop equalizer preset' },
+            { id: 'soft',       label: 'Soft',              emojiKey: 'soft',       fallback: emojis.soft,       description: 'Soft equalizer preset' },
         ];
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('filter_select')
-            .setPlaceholder(`${emojis.filter} Select an audio filter...`);
+            .setPlaceholder('Select an audio filter...');
 
         for (const filter of filterList) {
             const option = new StringSelectMenuOptionBuilder()
                 .setValue(filter.id)
                 .setLabel(filter.label)
                 .setDescription(filter.description);
-            const parsed = parseEmoji(filter.emoji);
-            if (parsed) option.setEmoji(parsed);
+            const emojiObj = getEmoji(client, filter.emojiKey, filter.fallback);
+            if (emojiObj) option.setEmoji(emojiObj);
             selectMenu.addOptions(option);
         }
 

@@ -5,6 +5,7 @@ const path = require('path');
 const { setupMusicEvents } = require('./music/events');
 const config = require('./config');
 const MessageContext = require('./utils/MessageContext');
+const setupApplicationEmojis = require('./utils/setupApplicationEmojis');
 
 const colors = {
     CYAN: '\x1b[96m',
@@ -185,6 +186,10 @@ client.once('clientReady', async () => {
     client.poru.init(client.user.id);
     setupMusicEvents(client);
     printSuccess('Music player system initialized');
+
+    printLoading('Application emojis');
+    await setupApplicationEmojis(client);
+    printSuccess('Application emojis ready');
 
     printLoading('LavaLink connection');
     try {
