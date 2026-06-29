@@ -1,27 +1,31 @@
-const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ComponentType } = require('discord.js');
-const { hexToDecimal } = require('../helpers/colorHelper');
+const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags, ComponentType } = require('discord.js');
 const { customFilter } = require('poru');
-const config = require('../config');
 const emojis = require('../utils/emojis');
+
+const parseEmoji = (str) => {
+    if (!str) return null;
+    const match = str.trim().match(/^<(a)?:(\w+):(\d+)>$/);
+    if (!match) return null;
+    return { animated: !!match[1], name: match[2], id: match[3] };
+};
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('filter')
         .setDescription('Apply audio filter (equalizer)'),
-    
+
     async execute(interaction) {
         const { client, member, guild } = interaction;
-        const isButton = interaction.isButton && interaction.isButton();
-        
+
         if (!member.voice.channel) {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(`${emojis.error} You need to be in a voice channel!`)
                 );
-            return interaction.reply({ 
-                components: [container], 
-                flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
-                ephemeral: true 
+            return interaction.reply({
+                components: [container],
+                flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
+                ephemeral: true
             });
         }
 
@@ -31,10 +35,10 @@ module.exports = {
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(`${emojis.error} No music is currently playing!`)
                 );
-            return interaction.reply({ 
-                components: [container], 
-                flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
-                ephemeral: true 
+            return interaction.reply({
+                components: [container],
+                flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
+                ephemeral: true
             });
         }
 
@@ -43,85 +47,70 @@ module.exports = {
         }
 
         const filterList = [
-            { id: 'nightcore', label: 'Nightcore', emoji: emojis.nightcore },
-            { id: 'vaporwave', label: 'Vaporwave', emoji: emojis.vaporwave },
-            { id: 'bassboost', label: 'Bassboost', emoji: emojis.bassboost },
-            { id: 'eightD', label: '8D', emoji: emojis.eightD },
-            { id: 'karaoke', label: 'Karaoke', emoji: emojis.karaoke },
-            { id: 'vibrato', label: 'Vibrato', emoji: emojis.vibrato },
-            { id: 'tremolo', label: 'Tremolo', emoji: emojis.tremolo },
-            { id: 'slowed', label: 'Slowed', emoji: emojis.slowed },
-            { id: 'distortion', label: 'Distortion', emoji: emojis.distortion },
-            { id: 'pop', label: 'Pop', emoji: emojis.pop },
-            { id: 'soft', label: 'Soft', emoji: emojis.soft },
+            { id: 'reset',      label: 'Reset (No Filter)', emoji: emojis.filter,     description: 'Remove all active filters' },
+            { id: 'nightcore',  label: 'Nightcore',         emoji: emojis.nightcore,  description: 'Speeds up the audio with higher pitch' },
+            { id: 'vaporwave',  label: 'Vaporwave',         emoji: emojis.vaporwave,  description: 'Slows down the audio with lower pitch' },
+            { id: 'bassboost',  label: 'Bassboost',         emoji: emojis.bassboost,  description: 'Boosts the bass frequencies' },
+            { id: 'eightD',     label: '8D',                emoji: emojis.eightD,     description: 'Rotating 8D audio effect' },
+            { id: 'karaoke',    label: 'Karaoke',           emoji: emojis.karaoke,    description: 'Removes vocals from the track' },
+            { id: 'vibrato',    label: 'Vibrato',           emoji: emojis.vibrato,    description: 'Adds a vibrato effect' },
+            { id: 'tremolo',    label: 'Tremolo',           emoji: emojis.tremolo,    description: 'Adds a tremolo effect' },
+            { id: 'slowed',     label: 'Slowed',            emoji: emojis.slowed,     description: 'Slows down the audio' },
+            { id: 'distortion', label: 'Distortion',        emoji: emojis.distortion, description: 'Adds distortion to the audio' },
+            { id: 'pop',        label: 'Pop',               emoji: emojis.pop,        description: 'Pop equalizer preset' },
+            { id: 'soft',       label: 'Soft',              emoji: emojis.soft,       description: 'Soft equalizer preset' },
         ];
 
-        const resetButton = new ButtonBuilder()
-            .setCustomId('filter_reset')
-            .setLabel('Reset (No Filter)')
-            .setStyle(ButtonStyle.Danger);
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('filter_select')
+            .setPlaceholder(`${emojis.filter} Select an audio filter...`);
 
-        const rows = [new ActionRowBuilder(), new ActionRowBuilder(), new ActionRowBuilder()];
-
-        const parseEmoji = (str) => {
-            if (!str) return null;
-            const match = str.match(/^<(a)?:(\w+):(\d+)>$/);
-            if (!match) return null;
-            return { animated: !!match[1], name: match[2], id: match[3] };
-        };
-
-        for (let i = 0; i < filterList.length; i++) {
-            const filter = filterList[i];
-            const btn = new ButtonBuilder()
-                .setCustomId(`filter_${filter.id}`)
+        for (const filter of filterList) {
+            const option = new StringSelectMenuOptionBuilder()
+                .setValue(filter.id)
                 .setLabel(filter.label)
-                .setStyle(ButtonStyle.Secondary);
-            const parsedEmoji = parseEmoji(filter.emoji);
-            if (parsedEmoji) btn.setEmoji(parsedEmoji);
-            if (i < 5) rows[0].addComponents(btn);
-            else if (i < 10) rows[1].addComponents(btn);
-            else rows[2].addComponents(btn);
+                .setDescription(filter.description);
+            const parsed = parseEmoji(filter.emoji);
+            if (parsed) option.setEmoji(parsed);
+            selectMenu.addOptions(option);
         }
-        rows[2].addComponents(resetButton);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const container = new ContainerBuilder()
             .addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(`## ${emojis.filter} Audio Filters\nSelect a filter to apply to the music:`)
             )
             .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
-            .addActionRowComponents(rows[0])
-            .addActionRowComponents(rows[1])
-            .addActionRowComponents(rows[2])
+            .addActionRowComponents(row)
             .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
             .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(`Powered by AeroX Developement`)
+                new TextDisplayBuilder().setContent(`Powered by AeroX Development`)
             );
 
-        const replyOptions = {
+        const filterMsg = await interaction.reply({
             components: [container],
             fetchReply: true,
             flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
-        };
-        
-        const filterMsg = await interaction.reply(replyOptions);
+        });
 
         if (player.filterCollector) player.filterCollector.stop();
         const collector = filterMsg.createMessageComponentCollector({
-            componentType: ComponentType.Button,
+            componentType: ComponentType.StringSelect,
             time: 0,
         });
         player.filterCollector = collector;
 
-        collector.on('collect', async (btnInt) => {
-            if (btnInt.user.id !== interaction.user.id) {
+        collector.on('collect', async (selectInt) => {
+            if (selectInt.user.id !== interaction.user.id) {
                 const errorContainer = new ContainerBuilder()
                     .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(`${emojis.error} Only the command user can use these buttons!`)
+                        new TextDisplayBuilder().setContent(`${emojis.error} Only the command user can use this menu!`)
                     );
-                return btnInt.reply({ 
-                    components: [errorContainer], 
-                    flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2, 
-                    ephemeral: true 
+                return selectInt.reply({
+                    components: [errorContainer],
+                    flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
+                    ephemeral: true
                 });
             }
 
@@ -129,24 +118,24 @@ module.exports = {
                 player.filters = new customFilter(player);
             }
 
-            if (btnInt.customId === 'filter_reset') {
+            const filterId = selectInt.values[0];
+
+            if (filterId === 'reset') {
                 player.filters.clearFilters(true);
                 await player.filters.updateFilters();
                 const container = new ContainerBuilder()
                     .addTextDisplayComponents(
                         new TextDisplayBuilder().setContent(`${emojis.success} All filters have been reset!`)
                     );
-                await btnInt.reply({
+                return selectInt.reply({
                     components: [container],
                     flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
                     ephemeral: true
                 });
-                return;
             }
 
-            const filterId = btnInt.customId.replace('filter_', '');
             let applied = false;
-            
+
             switch (filterId) {
                 case 'nightcore':
                     player.filters.setNightcore(true);
@@ -221,11 +210,12 @@ module.exports = {
 
             if (applied) {
                 await player.filters.updateFilters();
+                const filterName = filterList.find(f => f.id === filterId)?.label || filterId;
                 const container = new ContainerBuilder()
                     .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(`${emojis.success} Applied **${filterId}** filter!`)
+                        new TextDisplayBuilder().setContent(`${emojis.success} Applied **${filterName}** filter!`)
                     );
-                await btnInt.reply({
+                await selectInt.reply({
                     components: [container],
                     flags: MessageFlags.IsPersistent | MessageFlags.IsComponentsV2,
                     ephemeral: true
