@@ -58,10 +58,17 @@ module.exports = {
 
         const resetButton = new ButtonBuilder()
             .setCustomId('filter_reset')
-            .setLabel('Reset')
+            .setLabel('Reset (No Filter)')
             .setStyle(ButtonStyle.Danger);
 
         const rows = [new ActionRowBuilder(), new ActionRowBuilder(), new ActionRowBuilder()];
+
+        const parseEmoji = (str) => {
+            if (!str) return null;
+            const match = str.match(/^<(a)?:(\w+):(\d+)>$/);
+            if (!match) return null;
+            return { animated: !!match[1], name: match[2], id: match[3] };
+        };
 
         for (let i = 0; i < filterList.length; i++) {
             const filter = filterList[i];
@@ -69,6 +76,8 @@ module.exports = {
                 .setCustomId(`filter_${filter.id}`)
                 .setLabel(filter.label)
                 .setStyle(ButtonStyle.Secondary);
+            const parsedEmoji = parseEmoji(filter.emoji);
+            if (parsedEmoji) btn.setEmoji(parsedEmoji);
             if (i < 5) rows[0].addComponents(btn);
             else if (i < 10) rows[1].addComponents(btn);
             else rows[2].addComponents(btn);
