@@ -47,3 +47,5 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+artifacts/GanaBot/config.js
+artifacts/GanaBot/config.json
