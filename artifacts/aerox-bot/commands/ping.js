@@ -9,8 +9,7 @@ module.exports = {
     async execute(interaction) {
         const sent = await interaction.reply({ 
             content: 'Pinging...', 
-            fetchReply: true,
-            ephemeral: true 
+            fetchReply: true
         });
 
         const wsLatency = interaction.client.ws.ping;
