@@ -196,13 +196,10 @@ function setupMusicEvents(client) {
 
         container.addTextDisplayComponents(new TextDisplayBuilder().setContent(nowPlayingText));
 
-        let filterSelectRow = getFilterSelectRow(false);
-
         container
             .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
             .addActionRowComponents(firstControlButtonRow)
             .addActionRowComponents(secondControlButtonRow)
-            .addActionRowComponents(filterSelectRow)
             .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
 
         try {

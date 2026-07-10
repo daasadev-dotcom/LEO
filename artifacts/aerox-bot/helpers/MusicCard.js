@@ -538,7 +538,7 @@ class MusicCard {
 		ctx.shadowBlur = 10;
 		ctx.fillStyle = '#e0e8f0';
 		ctx.font = '16px "Inter SemiBold"';
-		ctx.fillText('AeroX Music', width - margin - 10, bottomY);
+		ctx.fillText('SLAYER DEV × Music', width - margin - 10, bottomY);
 
 		ctx.restore();
 
