@@ -60,15 +60,19 @@ module.exports = {
         if (members.size === 0) {
             if (!aloneTimeouts.has(guild.id)) {
                 const timeout = setTimeout(async () => {
+                    // Always clean up the map entry first so no new timeout races in
+                    aloneTimeouts.delete(guild.id);
+
                     const currentPlayer = client.poru.players.get(guild.id);
-                    if (!currentPlayer) {
-                        aloneTimeouts.delete(guild.id);
-                        return;
-                    }
-                    
+                    if (!currentPlayer) return;
+
+                    // Guard: only fire once per player lifecycle
+                    if (currentPlayer._inactivityHandled) return;
+                    currentPlayer._inactivityHandled = true;
+
                     const currentVoiceChannel = guild.channels.cache.get(currentPlayer.voiceChannel);
                     if (!currentVoiceChannel) {
-                        aloneTimeouts.delete(guild.id);
+                        currentPlayer.destroy();
                         return;
                     }
                     
@@ -90,20 +94,14 @@ module.exports = {
                         
                         if (currentPlayer.updateInterval) clearInterval(currentPlayer.updateInterval);
                         if (currentPlayer.buttonCollector) {
-                            try {
-                                currentPlayer.buttonCollector.stop('aloneInChannel');
-                            } catch (e) {}
+                            try { currentPlayer.buttonCollector.stop('aloneInChannel'); } catch (e) {}
                         }
                         if (currentPlayer.filterCollector) {
-                            try {
-                                currentPlayer.filterCollector.stop('aloneInChannel');
-                            } catch (e) {}
+                            try { currentPlayer.filterCollector.stop('aloneInChannel'); } catch (e) {}
                         }
                         
                         currentPlayer.destroy();
                     }
-                    
-                    aloneTimeouts.delete(guild.id);
                 }, 60000);
                 
                 aloneTimeouts.set(guild.id, timeout);
