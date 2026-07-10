@@ -1,4 +1,11 @@
 const { ContainerBuilder, TextDisplayBuilder, SectionBuilder, ThumbnailBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags, ComponentType, AttachmentBuilder } = require('discord.js');
+
+const parseEmoji = (str) => {
+    if (!str) return null;
+    const match = str.trim().match(/^<(a)?:(\w+):(\d+)>$/);
+    if (!match) return null;
+    return { animated: !!match[1], name: match[2], id: match[3] };
+};
 const { hexToDecimal } = require('../helpers/colorHelper');
 const { MusicCard } = require('../helpers/MusicCard');
 const Favorite = require('../database/models/Favorite');
@@ -102,26 +109,34 @@ function setupMusicEvents(client) {
         }
 
         function getFilterSelectRow(disabled = false) {
-            return new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('music_filter_select')
-                    .setPlaceholder('🎚️ Select an audio filter...')
-                    .setDisabled(disabled)
-                    .addOptions(
-                        new StringSelectMenuOptionBuilder().setLabel('Reset (No Filter)').setValue('reset').setEmoji('🔄'),
-                        new StringSelectMenuOptionBuilder().setLabel('Nightcore').setValue('nightcore').setEmoji('🌙'),
-                        new StringSelectMenuOptionBuilder().setLabel('Vaporwave').setValue('vaporwave').setEmoji('🌊'),
-                        new StringSelectMenuOptionBuilder().setLabel('Bassboost').setValue('bassboost').setEmoji('🔊'),
-                        new StringSelectMenuOptionBuilder().setLabel('8D').setValue('eightD').setEmoji('🔄'),
-                        new StringSelectMenuOptionBuilder().setLabel('Karaoke').setValue('karaoke').setEmoji('🎤'),
-                        new StringSelectMenuOptionBuilder().setLabel('Vibrato').setValue('vibrato').setEmoji('〰️'),
-                        new StringSelectMenuOptionBuilder().setLabel('Tremolo').setValue('tremolo').setEmoji('〰️'),
-                        new StringSelectMenuOptionBuilder().setLabel('Slowed').setValue('slowed').setEmoji('🐢'),
-                        new StringSelectMenuOptionBuilder().setLabel('Distortion').setValue('distortion').setEmoji('⚡'),
-                        new StringSelectMenuOptionBuilder().setLabel('Pop').setValue('pop').setEmoji('🎧'),
-                        new StringSelectMenuOptionBuilder().setLabel('Soft').setValue('soft').setEmoji('💤')
-                    )
-            );
+            const filterOptions = [
+                { label: 'Reset (No Filter)', value: 'reset',       emoji: emojis.filter      },
+                { label: 'Nightcore',         value: 'nightcore',   emoji: emojis.nightcore   },
+                { label: 'Vaporwave',         value: 'vaporwave',   emoji: emojis.vaporwave   },
+                { label: 'Bassboost',         value: 'bassboost',   emoji: emojis.bassboost   },
+                { label: '8D',                value: 'eightD',      emoji: emojis.eightD      },
+                { label: 'Karaoke',           value: 'karaoke',     emoji: emojis.karaoke     },
+                { label: 'Vibrato',           value: 'vibrato',     emoji: emojis.vibrato     },
+                { label: 'Tremolo',           value: 'tremolo',     emoji: emojis.tremolo     },
+                { label: 'Slowed',            value: 'slowed',      emoji: emojis.slowed      },
+                { label: 'Distortion',        value: 'distortion',  emoji: emojis.distortion  },
+                { label: 'Pop',               value: 'pop',         emoji: emojis.pop         },
+                { label: 'Soft',              value: 'soft',        emoji: emojis.soft        },
+            ];
+
+            const select = new StringSelectMenuBuilder()
+                .setCustomId('music_filter_select')
+                .setPlaceholder(`${emojis.filter} Select an audio filter...`)
+                .setDisabled(disabled);
+
+            for (const { label, value, emoji } of filterOptions) {
+                const option = new StringSelectMenuOptionBuilder().setLabel(label).setValue(value);
+                const parsed = parseEmoji(emoji);
+                if (parsed) option.setEmoji(parsed);
+                select.addOptions(option);
+            }
+
+            return new ActionRowBuilder().addComponents(select);
         }
 
         let firstControlButtonRow = getFirstControlButtonRow(false, false);
