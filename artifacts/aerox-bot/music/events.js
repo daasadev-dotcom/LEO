@@ -126,7 +126,7 @@ function setupMusicEvents(client) {
 
             const select = new StringSelectMenuBuilder()
                 .setCustomId('music_filter_select')
-                .setPlaceholder(`${emojis.filter} Select an audio filter...`)
+                .setPlaceholder('Select an audio filter...')
                 .setDisabled(disabled);
 
             for (const { label, value, emoji } of filterOptions) {
