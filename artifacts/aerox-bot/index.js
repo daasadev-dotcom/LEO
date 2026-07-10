@@ -271,11 +271,6 @@ client.on('messageCreate', async (message) => {
         await command.execute(ctx);
     } catch (error) {
         console.error(`Error executing prefix command ${commandName}:`, error);
-        try {
-            await message.reply('❌ There was an error executing that command!');
-        } catch (replyError) {
-            console.error('Error sending error response:', replyError);
-        }
     }
 });
 

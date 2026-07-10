@@ -115,10 +115,9 @@ class MessageContext {
     // ── Interaction-compatible API ──────────────────────────────────────────────
 
     async deferReply(options) {
+        // Silently mark as deferred — no loading placeholder in prefix mode.
+        // editReply will send the real message when it's ready.
         this.deferred = true;
-        // Send a placeholder so editReply has something to edit
-        this._reply = await this.message.channel.send({ content: '⏳ Loading...' });
-        return this._reply;
     }
 
     async reply(payload) {
