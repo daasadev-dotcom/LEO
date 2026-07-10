@@ -129,10 +129,8 @@ function setupMusicEvents(client) {
                 .setPlaceholder('Select an audio filter...')
                 .setDisabled(disabled);
 
-            for (const { label, value, emoji } of filterOptions) {
+            for (const { label, value } of filterOptions) {
                 const option = new StringSelectMenuOptionBuilder().setLabel(label).setValue(value);
-                const parsed = parseEmoji(emoji);
-                if (parsed) option.setEmoji(parsed);
                 select.addOptions(option);
             }
 
@@ -200,7 +198,8 @@ function setupMusicEvents(client) {
             .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
             .addActionRowComponents(firstControlButtonRow)
             .addActionRowComponents(secondControlButtonRow)
-            .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true));
+            .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
+            .addActionRowComponents(getFilterSelectRow(false));
 
         try {
             const messageOptions = {
